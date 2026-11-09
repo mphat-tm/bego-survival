@@ -12,7 +12,28 @@ canvas{display:block;position:fixed;inset:0;width:100%;height:100%}
 #hud b{font-size:15px}
 #js{position:fixed;width:90px;height:90px;margin:-45px 0 0 -45px;border-radius:50%;border:2px solid #fff8;background:#fff2;display:none;pointer-events:none}
 #js i{position:absolute;left:50%;top:50%;width:36px;height:36px;margin:-18px;border-radius:50%;background:#fffb}
-</style></head><body>
+#hud,#pause{display:none}body.play #hud,body.play #pause{display:block}
+.ov{position:fixed;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Baloo 2',system-ui,sans-serif;text-align:center;color:#fff;padding:env(safe-area-inset-top,0px) 16px env(safe-area-inset-bottom,0px)}
+#menu{background:linear-gradient(#0000 45%,#0b4f7a77)}
+.logo{font-size:clamp(46px,13vw,90px);font-weight:800;line-height:.9;text-shadow:0 4px 0 #ff9f1c,0 8px 0 #e8553d,0 12px 16px #0006}
+.logo small{display:block;font-size:.4em;letter-spacing:7px;color:#fff6c8;text-shadow:0 3px 0 #1b7ab3}
+.btn{font:inherit;font-weight:800;border:0;border-radius:18px;padding:8px 18px;margin:5px;font-size:17px;color:#fff;background:#1fa5e0;box-shadow:0 5px 0 #0f6f9c;min-width:150px}
+.btn:active{transform:translateY(3px);box-shadow:0 2px 0 #0f6f9c}
+.btn.main{background:#ffb703;color:#7a3e00;box-shadow:0 6px 0 #d97f00;font-size:28px;min-width:240px;padding:10px 28px}
+.row{display:flex;flex-wrap:wrap;justify-content:center;max-width:420px}
+#loading{display:none;z-index:9;background:linear-gradient(#7fd3f7,#cdefff 52%,#2aa7de 52%,#0f6fa8)}
+.bar{width:70%;max-width:320px;height:16px;border-radius:9px;background:#fff7;overflow:hidden;margin:12px 0 8px}
+.bar i{display:block;height:100%;width:0;background:#ffb703;border-radius:9px}
+#dead{display:none;z-index:8;background:#0b2a3dcc;font-size:26px;font-weight:800}
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 24px);transform:translateX(-50%);z-index:20;background:#000a;color:#fff;font:700 15px 'Baloo 2',system-ui,sans-serif;padding:8px 16px;border-radius:14px;opacity:0;transition:opacity .3s;pointer-events:none}
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&display=swap"></head><body>
+<div id='menu' class='ov'><div class='logo'>BEGO<small>SURVIVAL</small></div><div style='font-weight:700;margin:6px 0 14px;text-shadow:0 2px 4px #0006'>Sinh tồn trên bè gỗ giữa biển 🌊</div>
+<button class='btn main' id='bPlay'>Chơi</button>
+<div class='row'><button class='btn' data-s='Cửa hàng'>🛒 Cửa hàng</button><button class='btn' data-s='Trang phục'>👕 Trang phục</button><button class='btn' data-s='Cài đặt'>⚙️ Cài đặt</button><button class='btn' data-s='Thoát'>🚪 Thoát</button></div></div>
+<div id='loading' class='ov'><div class='logo'>BEGO<small>SURVIVAL</small></div><div style='font-size:60px;margin:6px'>☀️ 🛶 🦈</div><div class='bar'><i id='fill'></i></div><div id='tip' style='font-weight:700;font-size:15px'></div></div>
+<div id='dead' class='ov'><div style='font-size:64px'>🦈</div>Cá mập đã đớp bạn!<button class='btn main' id='again' style='margin-top:14px'>Chơi lại</button></div>
+<button id='pause' class='btn' style='position:fixed;right:10px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:6;min-width:0;padding:4px 14px;margin:0'>☰ Menu</button>
+<div id='toast'></div>
 <div id="hud"><b>Bè Gỗ · Biển và Bè</b><br>Kéo nửa màn hình bên trái để đi, bên phải để nhìn quanh.</div>
 <div id="js"><i></i></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -26,8 +47,8 @@ S.background = new THREE.Color(0x9fd8f0);
 S.fog = new THREE.Fog(0x9fd8f0, 30, 150);
 const C = new THREE.PerspectiveCamera(70,1,0.1,400);
 C.rotation.order = 'YXZ';
-S.add(new THREE.HemisphereLight(0xffffff,0x2a6f9a,0.95));
-const sun = new THREE.DirectionalLight(0xfff2cc,0.9);
+S.add(new THREE.HemisphereLight(0xffffff,0x2a6f9a,0.75));
+const sun = new THREE.DirectionalLight(0xfff2cc,0.6);
 sun.position.set(40,60,20); S.add(sun);
 const sunBall = new THREE.Mesh(new THREE.SphereGeometry(7,16,16), new THREE.MeshBasicMaterial({color:0xfff6c8,fog:false}));
 sunBall.position.set(120,90,60); S.add(sunBall);
@@ -35,7 +56,7 @@ sunBall.position.set(120,90,60); S.add(sunBall);
 // Biển
 const wg = new THREE.PlaneGeometry(320,320,90,90); wg.rotateX(-Math.PI/2);
 const wp = wg.attributes.position;
-S.add(new THREE.Mesh(wg,new THREE.MeshPhongMaterial({color:0x1f8fc9,flatShading:true,shininess:80,specular:0x88ccff})));
+S.add(new THREE.Mesh(wg,new THREE.MeshPhongMaterial({color:0x2490c8,flatShading:true,shininess:40,specular:0x335577})));
 // Sóng êm dần quanh bè (d<5) nên nước không tràn lên bè
 const wave=(x,z,t)=>{const d=Math.hypot(x,z),f=Math.min(1,Math.max(0,(d-5)/9));return f*f*(Math.sin(x*.25+t)*.35+Math.sin(z*.3+t*1.3)*.3+Math.sin((x+z)*.12+t*.7)*.5);};
 
@@ -57,8 +78,8 @@ for(let i=0;i<3;i++)for(let j=0;j<3;j++)for(let k=0;k<4;k++){
 }
 const drum=new THREE.MeshLambertMaterial({color:0x3c6e91});
 [[-2.4,-2.4],[2.4,-2.4],[-2.4,2.4],[2.4,2.4],[0,-2.4],[0,2.4]].forEach(([x,z])=>{
-  const b=new THREE.Mesh(new THREE.CylinderGeometry(.55,.55,1.3,10),drum);
-  b.rotation.x=Math.PI/2; b.position.set(x,-.35,z); raft.add(b);
+  const b=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,1.3,10),drum);
+  b.rotation.x=Math.PI/2; b.position.set(x,-.45,z); raft.add(b);
 });
 const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.07,3,6),wood[1]);
 pole.position.set(-2.6,1.5,-2.6); raft.add(pole);
@@ -79,13 +100,43 @@ for(let i=0;i<6;i++){
 }
 
 // Điều khiển
+// Cá mập
+function makeShark(){
+  const g=new THREE.Group(),b=new THREE.MeshLambertMaterial({color:0x6f9fc4}),w=new THREE.MeshLambertMaterial({color:0xffffff}),k=new THREE.MeshBasicMaterial({color:0x111111});
+  const body=new THREE.Mesh(new THREE.SphereGeometry(1,14,10),b);body.scale.set(.9,.8,2.4);g.add(body);
+  const belly=new THREE.Mesh(new THREE.SphereGeometry(1,14,10),w);belly.scale.set(.85,.5,2.3);belly.position.y=-.3;g.add(belly);
+  const fin=new THREE.Mesh(new THREE.ConeGeometry(.4,1.1,4),b);fin.position.set(0,1,-.1);fin.rotation.x=-.3;g.add(fin);
+  const tail=new THREE.Mesh(new THREE.ConeGeometry(.45,1.4,4),b);tail.position.set(0,.3,-2.7);tail.rotation.x=-Math.PI/2;g.add(tail);
+  [-1,1].forEach(s=>{const e=new THREE.Mesh(new THREE.SphereGeometry(.17,8,8),k);e.position.set(s*.5,.35,1.75);g.add(e);});
+  return g;
+}
+const sk=makeShark();sk.position.set(13,-.4,0);S.add(sk);
+let state='menu',inWater=false,dead=false,ang=0;
 let yaw=0,pitch=-0.05,mx=0,mz=0;
+function resetPlayer(){C.position.set(0,1.7,0);yaw=0;pitch=-.05;dead=false;inWater=false;}
+
+// Menu / loading
+const $=id=>document.getElementById(id);
+function toast(m){const e=$('toast');e.textContent=m;e.style.opacity=1;clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.opacity=0,1800);}
+document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>toast(b.dataset.s==='Thoát'?'Hẹn gặp lại bạn nhé! 👋':b.dataset.s+' sẽ ra mắt sớm ✨'));
+let saved=false;try{saved=!!localStorage.getItem('bego')}catch(e){}
+$('bPlay').textContent=saved?'Tiếp tục':'Chơi';
+const tips=['Mẹo: đừng nhảy xuống biển, cá mập đang đói! 🦈','Mẹo: thùng gỗ trôi có nhiều vật tư hữu ích 📦','Mẹo: cần có búa để mở rộng bè 🔨'];
+$('bPlay').onclick=()=>{
+  $('menu').style.display='none';$('loading').style.display='flex';
+  $('tip').textContent=tips[Math.floor(Math.random()*tips.length)];
+  let p=0;const iv=setInterval(()=>{p+=Math.random()*14+6;$('fill').style.width=Math.min(p,100)+'%';
+    if(p>=100){clearInterval(iv);setTimeout(()=>{$('loading').style.display='none';resetPlayer();state='play';document.body.classList.add('play');try{localStorage.setItem('bego','1')}catch(e){}},250);}},180);
+};
+$('pause').onclick=()=>{state='menu';document.body.classList.remove('play');$('menu').style.display='flex';$('bPlay').textContent='Tiếp tục';};
+$('again').onclick=()=>{$('dead').style.display='none';resetPlayer();sk.position.set(13,-.4,0);};
 const keys={};
 addEventListener('keydown',e=>keys[e.code]=1);
 addEventListener('keyup',e=>keys[e.code]=0);
 const js=document.getElementById('js'),knob=js.firstElementChild;
 const T={}; // touch theo id
 addEventListener('touchstart',e=>{
+  if(state!=='play')return;
   for(const t of e.changedTouches){
     if(t.clientX<innerWidth/2){T[t.identifier]={m:1,x:t.clientX,y:t.clientY};
       js.style.display='block';js.style.left=t.clientX+'px';js.style.top=t.clientY+'px';}
@@ -114,7 +165,7 @@ addEventListener('mousedown',()=>drag=true);
 addEventListener('mouseup',()=>drag=false);
 addEventListener('mousemove',e=>{if(drag){yaw-=e.movementX*SENS;pitch-=e.movementY*SENS;}});
 
-function resize(){R.setSize(innerWidth,innerHeight);C.aspect=innerWidth/innerHeight;C.updateProjectionMatrix();}
+function resize(){const w=R.domElement.clientWidth,h=R.domElement.clientHeight;R.setSize(w,h,false);C.aspect=w/h;C.updateProjectionMatrix();}
 addEventListener('resize',resize);resize();
 
 // Vòng lặp
@@ -123,16 +174,25 @@ function loop(){
   const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;
   for(let i=0;i<wp.count;i++)wp.setY(i,wave(wp.getX(i),wp.getZ(i),t));
   wp.needsUpdate=true;
-  raft.position.y=.3+Math.sin(t*1.2)*.04;
+  raft.position.y=.15+Math.sin(t*1.2)*.04;
   raft.rotation.z=Math.sin(t*.9)*.015;
   raft.rotation.x=Math.cos(t*.7)*.015;
   flag.rotation.y=Math.sin(t*3)*.25;
   pitch=Math.max(-1.3,Math.min(1.3,pitch));
   C.rotation.set(pitch,yaw,0);
   let ix=mx+(keys.KeyD?1:0)-(keys.KeyA?1:0), iz=mz+(keys.KeyS?1:0)-(keys.KeyW?1:0);
-  const sp=2.6*dt,c=Math.cos(yaw),s=Math.sin(yaw);
-  C.position.x=Math.max(-2.7,Math.min(2.7,C.position.x+(ix*c+iz*s)*sp));
-  C.position.z=Math.max(-2.7,Math.min(2.7,C.position.z+(-ix*s+iz*c)*sp));
+  const sp=(state==='play'&&!dead?(inWater?1.6:2.6):0)*dt,c=Math.cos(yaw),s=Math.sin(yaw);
+  C.position.x=Math.max(-14,Math.min(14,C.position.x+(ix*c+iz*s)*sp));
+  C.position.z=Math.max(-14,Math.min(14,C.position.z+(-ix*s+iz*c)*sp));
+  if(state==='menu'){C.position.set(Math.sin(t*.3)*1.5,2.4,10);yaw=Math.sin(t*.2)*.1;pitch=-.14;C.rotation.set(pitch,yaw,0);inWater=false;}
+  else if(!dead){inWater=Math.abs(C.position.x)>3||Math.abs(C.position.z)>3;C.position.y+=((inWater?-.15:1.7)-C.position.y)*Math.min(1,dt*5);}
+  {const chase=state==='play'&&inWater&&!dead;let tx,tz,v;
+   if(chase){tx=C.position.x;tz=C.position.z;v=7;}else{ang+=dt*.4;const r=state==='menu'?7:13;tx=Math.cos(ang)*r;tz=Math.sin(ang)*r;v=6.5;}
+   const dx=tx-sk.position.x,dz=tz-sk.position.z,d=Math.hypot(dx,dz);
+   if(d>.3){const st=Math.min(d,v*dt);sk.position.x+=dx/d*st;sk.position.z+=dz/d*st;
+     let da=Math.atan2(dx,dz)-sk.rotation.y;da=Math.atan2(Math.sin(da),Math.cos(da));sk.rotation.y+=da*Math.min(1,dt*4);}
+   sk.position.y=-.4+Math.sin(t*3)*.05;sk.rotation.z=Math.sin(t*6)*.08;
+   if(chase&&d<2.2){dead=true;$('dead').style.display='flex';}}
   crates.forEach(m=>{
     const u=m.userData;m.position.x+=u.vx*dt;m.position.z+=u.vz*dt;
     m.position.y=wave(m.position.x,m.position.z,t)*.8+.1;
