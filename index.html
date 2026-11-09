@@ -33,8 +33,12 @@ canvas{display:block;position:fixed;inset:0;width:100%;height:100%}
 <div id='loading' class='ov'><div class='logo'>BEGO<small>SURVIVAL</small></div><div style='font-size:60px;margin:6px'>☀️ 🛶 🦈</div><div class='bar'><i id='fill'></i></div><div id='tip' style='font-weight:700;font-size:15px'></div></div>
 <div id='dead' class='ov'><div style='font-size:64px'>🦈</div>Cá mập đã đớp bạn!<button class='btn main' id='again' style='margin-top:14px'>Chơi lại</button></div>
 <button id='pause' class='btn' style='position:fixed;right:10px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:6;min-width:0;padding:4px 14px;margin:0'>☰ Menu</button>
+<style>#cross,#fire{display:none}body.play #cross{display:block}body.play #fire{display:flex}
+#cross{position:fixed;left:50%;top:50%;width:10px;height:10px;margin:-5px;border:2px solid #fff;border-radius:50%;opacity:.85;z-index:4;pointer-events:none;box-shadow:0 0 3px #0008}
+#fire{position:fixed;right:calc(env(safe-area-inset-right,0px) + 22px);bottom:calc(env(safe-area-inset-bottom,0px) + 28px);width:84px;height:84px;border-radius:50%;border:0;z-index:6;align-items:center;justify-content:center;font-size:38px;background:#ffb703;box-shadow:0 6px 0 #d97f00}
+#fire:active{transform:translateY(3px)}</style><div id='cross'></div><button id='fire'>🪝</button>
 <div id='toast'></div>
-<div id="hud"><b>Bè Gỗ · Biển và Bè</b><br>Kéo nửa màn hình bên trái để đi, bên phải để nhìn quanh.</div>
+<div id="hud"><b>Bè Gỗ · Biển và Bè</b><br>Kéo trái để đi, kéo phải để nhìn. Ngắm vào thùng gỗ rồi bấm 🪝 để bắn dây.<br><span id='inv'></span></div>
 <div id="js"><i></i></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -42,21 +46,27 @@ const SENS = 0.005; // độ nhạy nhìn (sau này nối vào Cài đặt)
 const R = new THREE.WebGLRenderer({antialias:true});
 R.setPixelRatio(Math.min(devicePixelRatio,2));
 document.body.appendChild(R.domElement);
+R.toneMapping=THREE.ACESFilmicToneMapping;R.toneMappingExposure=1.2;R.shadowMap.enabled=true;
 const S = new THREE.Scene();
-S.background = new THREE.Color(0x9fd8f0);
-S.fog = new THREE.Fog(0x9fd8f0, 30, 150);
+S.background = new THREE.Color(0xd6e6ee);
+{const c=document.createElement('canvas');c.width=4;c.height=256;const g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,256);
+gr.addColorStop(0,'#2f6fb5');gr.addColorStop(.45,'#8fc0e4');gr.addColorStop(.5,'#d6e6ee');gr.addColorStop(1,'#d6e6ee');g.fillStyle=gr;g.fillRect(0,0,4,256);
+S.add(new THREE.Mesh(new THREE.SphereGeometry(350,24,16),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),side:THREE.BackSide,fog:false,depthWrite:false})));}
+S.fog = new THREE.Fog(0xd6e6ee, 25, 150);
 const C = new THREE.PerspectiveCamera(70,1,0.1,400);
 C.rotation.order = 'YXZ';
-S.add(new THREE.HemisphereLight(0xffffff,0x2a6f9a,0.75));
-const sun = new THREE.DirectionalLight(0xfff2cc,0.6);
+S.add(new THREE.HemisphereLight(0xcfe6ff,0x1d4f6b,0.6));
+const sun = new THREE.DirectionalLight(0xfff0d0,1.1);
 sun.position.set(40,60,20); S.add(sun);
+sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.bias=-.0005;
+const sc=sun.shadow.camera;sc.left=sc.bottom=-8;sc.right=sc.top=8;sc.near=10;sc.far=140;
 const sunBall = new THREE.Mesh(new THREE.SphereGeometry(7,16,16), new THREE.MeshBasicMaterial({color:0xfff6c8,fog:false}));
 sunBall.position.set(120,90,60); S.add(sunBall);
 
 // Biển
-const wg = new THREE.PlaneGeometry(320,320,90,90); wg.rotateX(-Math.PI/2);
+const wg = new THREE.PlaneGeometry(320,320,70,70); wg.rotateX(-Math.PI/2);
 const wp = wg.attributes.position;
-S.add(new THREE.Mesh(wg,new THREE.MeshPhongMaterial({color:0x2490c8,flatShading:true,shininess:40,specular:0x335577})));
+S.add(new THREE.Mesh(wg,new THREE.MeshPhongMaterial({color:0x0f6288,shininess:110,specular:0xcfe0ea})));
 // Sóng êm dần quanh bè (d<5) nên nước không tràn lên bè
 const wave=(x,z,t)=>{const d=Math.hypot(x,z),f=Math.min(1,Math.max(0,(d-5)/9));return f*f*(Math.sin(x*.25+t)*.35+Math.sin(z*.3+t*1.3)*.3+Math.sin((x+z)*.12+t*.7)*.5);};
 
@@ -71,12 +81,16 @@ for(let i=0;i<10;i++){
 
 // Bè gỗ
 const raft = new THREE.Group(); S.add(raft);
-const wood=[0x9a6b3c,0x8b5e34,0xa87746].map(c=>new THREE.MeshLambertMaterial({color:c}));
+function woodTex(base){const c=document.createElement('canvas');c.width=256;c.height=64;const g=c.getContext('2d');g.fillStyle=base;g.fillRect(0,0,256,64);
+for(let i=0;i<60;i++){g.strokeStyle='rgba(40,22,8,'+(.08+Math.random()*.18)+')';g.lineWidth=Math.random()*1.6+.3;g.beginPath();const y=Math.random()*64;g.moveTo(0,y);g.bezierCurveTo(80,y+Math.random()*6-3,170,y+Math.random()*6-3,256,y+Math.random()*4-2);g.stroke();}
+for(let i=0;i<400;i++){g.fillStyle='rgba(255,230,190,'+Math.random()*.06+')';g.fillRect(Math.random()*256,Math.random()*64,Math.random()*20,1);}
+const t=new THREE.CanvasTexture(c);t.anisotropy=4;return t;}
+const wood=['#8a6a48','#7a5c3d','#977853'].map(c=>new THREE.MeshStandardMaterial({map:woodTex(c),roughness:.92,metalness:0}));
 for(let i=0;i<3;i++)for(let j=0;j<3;j++)for(let k=0;k<4;k++){
   const p=new THREE.Mesh(new THREE.BoxGeometry(1.9,.18,.44),wood[(i+j+k)%3]);
   p.position.set(i*2-2,0,j*2-2+(k-1.5)*.48); raft.add(p);
 }
-const drum=new THREE.MeshLambertMaterial({color:0x3c6e91});
+const drum=new THREE.MeshStandardMaterial({color:0x4a5a63,roughness:.6,metalness:.4});
 [[-2.4,-2.4],[2.4,-2.4],[-2.4,2.4],[2.4,2.4],[0,-2.4],[0,2.4]].forEach(([x,z])=>{
   const b=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,1.3,10),drum);
   b.rotation.x=Math.PI/2; b.position.set(x,-.45,z); raft.add(b);
@@ -85,11 +99,12 @@ const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.07,3,6),wood[1]);
 pole.position.set(-2.6,1.5,-2.6); raft.add(pole);
 const flag=new THREE.Mesh(new THREE.PlaneGeometry(1,.6),new THREE.MeshLambertMaterial({color:0xe8553d,side:THREE.DoubleSide}));
 flag.position.set(-2.1,2.6,-2.6); raft.add(flag);
+raft.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});
 raft.add(C); C.position.set(0,1.7,0);
 
 // Thùng gỗ trôi
 const crates=[];
-const cmat=new THREE.MeshLambertMaterial({color:0xb98550});
+const cmat=new THREE.MeshStandardMaterial({map:woodTex('#8c6b45'),roughness:.9});
 for(let i=0;i<6;i++){
   const m=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),cmat);
   m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry),new THREE.LineBasicMaterial({color:0x5a3a1a})));
@@ -102,7 +117,7 @@ for(let i=0;i<6;i++){
 // Điều khiển
 // Cá mập
 function makeShark(){
-  const g=new THREE.Group(),b=new THREE.MeshLambertMaterial({color:0x6f9fc4}),w=new THREE.MeshLambertMaterial({color:0xffffff}),k=new THREE.MeshBasicMaterial({color:0x111111});
+  const g=new THREE.Group(),b=new THREE.MeshStandardMaterial({color:0x7f93a3,roughness:.45}),w=new THREE.MeshStandardMaterial({color:0xdfe6ea,roughness:.5}),k=new THREE.MeshBasicMaterial({color:0x111111});
   const body=new THREE.Mesh(new THREE.SphereGeometry(1,14,10),b);body.scale.set(.9,.8,2.4);g.add(body);
   const belly=new THREE.Mesh(new THREE.SphereGeometry(1,14,10),w);belly.scale.set(.85,.5,2.3);belly.position.y=-.3;g.add(belly);
   const fin=new THREE.Mesh(new THREE.ConeGeometry(.4,1.1,4),b);fin.position.set(0,1,-.1);fin.rotation.x=-.3;g.add(fin);
@@ -129,7 +144,33 @@ $('bPlay').onclick=()=>{
     if(p>=100){clearInterval(iv);setTimeout(()=>{$('loading').style.display='none';resetPlayer();state='play';document.body.classList.add('play');try{localStorage.setItem('bego','1')}catch(e){}},250);}},180);
 };
 $('pause').onclick=()=>{state='menu';document.body.classList.remove('play');$('menu').style.display='flex';$('bPlay').textContent='Tiếp tục';};
-$('again').onclick=()=>{$('dead').style.display='none';resetPlayer();sk.position.set(13,-.4,0);};
+const inv={'Gỗ':0,'Dây thừng':0,'Vải':0,'Sắt vụn':0};
+function showInv(){$('inv').textContent='🪵 '+inv['Gỗ']+'   🧵 '+inv['Dây thừng']+'   🧶 '+inv['Vải']+'   🔩 '+inv['Sắt vụn'];}
+showInv();
+// Máy bắn dây (gắn trên camera)
+const gun=new THREE.Group(),gm=new THREE.MeshStandardMaterial({color:0x3b4650,metalness:.7,roughness:.4});
+gun.add(new THREE.Mesh(new THREE.BoxGeometry(.14,.14,.4),gm));
+const gn=new THREE.Mesh(new THREE.CylinderGeometry(.04,.05,.35,10),gm);gn.rotation.x=Math.PI/2;gn.position.set(0,.03,-.3);gun.add(gn);
+const spool=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,.1,12),new THREE.MeshStandardMaterial({color:0xb08a52,roughness:.9}));spool.rotation.z=Math.PI/2;spool.position.set(0,.1,.05);gun.add(spool);
+gun.position.set(.28,-.26,-.55);gun.rotation.y=.08;gun.visible=false;C.add(gun);
+const RP=12,ropeGeo=new THREE.BufferGeometry();ropeGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(RP*3),3));
+const rope=new THREE.Line(ropeGeo,new THREE.LineBasicMaterial({color:0xd9c08a}));rope.frustumCulled=false;rope.visible=false;S.add(rope);
+function setRope(a,b){const p=ropeGeo.attributes.position;for(let i=0;i<RP;i++){const u=i/(RP-1);p.setXYZ(i,a.x+(b.x-a.x)*u,a.y+(b.y-a.y)*u-Math.sin(Math.PI*u)*.35,a.z+(b.z-a.z)*u);}p.needsUpdate=true;}
+const ray=new THREE.Raycaster();let hooked=null;
+function fire(){
+  if(state!=='play'||dead||hooked)return;
+  ray.setFromCamera({x:0,y:0},C);ray.far=32;
+  const h=ray.intersectObjects(crates,false)[0];
+  if(h){hooked=h.object;toast('Móc trúng! Đang kéo thùng về... 🪝');}else toast('Ngắm vào thùng gỗ rồi bắn nhé 🎯');
+}
+function collect(m){
+  const got=[];
+  [['Gỗ',1,3],['Dây thừng',0,2],['Vải',0,1],['Sắt vụn',0,2]].forEach(([k,a,b])=>{const n=a+Math.floor(Math.random()*(b-a+1));if(n){inv[k]+=n;got.push('+'+n+' '+k);}});
+  toast('📦 '+got.join(', '));showInv();
+  const a=Math.random()*6.28,d=22+Math.random()*12;m.position.set(Math.cos(a)*d,0,Math.sin(a)*d);m.userData.vx=(Math.random()-.5)*.4;m.userData.vz=(Math.random()-.5)*.4;
+}
+$('fire').onclick=fire;addEventListener('keydown',e=>{if(e.code==='Space')fire();});
+$('again').onclick=()=>{$('dead').style.display='none';resetPlayer();sk.position.set(13,-.4,0);hooked=null;for(const k in inv)inv[k]=0;showInv();};
 const keys={};
 addEventListener('keydown',e=>keys[e.code]=1);
 addEventListener('keyup',e=>keys[e.code]=0);
@@ -173,7 +214,7 @@ const clock=new THREE.Clock();
 function loop(){
   const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;
   for(let i=0;i<wp.count;i++)wp.setY(i,wave(wp.getX(i),wp.getZ(i),t));
-  wp.needsUpdate=true;
+  wp.needsUpdate=true;wg.computeVertexNormals();
   raft.position.y=.15+Math.sin(t*1.2)*.04;
   raft.rotation.z=Math.sin(t*.9)*.015;
   raft.rotation.x=Math.cos(t*.7)*.015;
@@ -193,6 +234,13 @@ function loop(){
      let da=Math.atan2(dx,dz)-sk.rotation.y;da=Math.atan2(Math.sin(da),Math.cos(da));sk.rotation.y+=da*Math.min(1,dt*4);}
    sk.position.y=-.4+Math.sin(t*3)*.05;sk.rotation.z=Math.sin(t*6)*.08;
    if(chase&&d<2.2){dead=true;$('dead').style.display='flex';}}
+  gun.visible=state==='play'&&!dead;
+  if(state!=='play'||dead)hooked=null;
+  if(hooked){const m=hooked,d=Math.hypot(m.position.x,m.position.z);
+    if(d<4.2){collect(m);hooked=null;}
+    else{m.userData.vx=m.userData.vz=0;m.position.x-=m.position.x/d*dt*4;m.position.z-=m.position.z/d*dt*4;
+      setRope(gun.localToWorld(new THREE.Vector3(0,.03,-.5)),m.position);spool.rotateY(dt*12);}}
+  rope.visible=!!hooked;
   crates.forEach(m=>{
     const u=m.userData;m.position.x+=u.vx*dt;m.position.z+=u.vz*dt;
     m.position.y=wave(m.position.x,m.position.z,t)*.8+.1;
